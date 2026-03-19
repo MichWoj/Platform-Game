@@ -20,6 +20,7 @@ class GameFrame {
     this.coins = [];
     this.bomb = null;
 
+    // Mario properties
     this.mario = {
       x: 0,
       y: 0,
@@ -28,23 +29,25 @@ class GameFrame {
       velocityY: 0,
       isJumping: false,
       jumpPower: 12,
-      superJumpPower: 20,
+      superJumpPower: 22, // The "Double Tap" Reward
       gravity: 0.5,
       groundY: 0,
       facingRight: true
     };
 
-    this.keys = { left: false, right: false, up: false };
+    // Double-Tap/Click Configuration
+    this.touchState = {
+      lastTapTime: 0,
+      doubleTapDelay: 500 // 500ms window for Super Jump
+    };
 
-    // Initialization
+    this.keys = { left: false, right: false };
+
+    // Initialize
     this.resize();
     window.addEventListener('resize', () => this.resize());
     this.initializeControls();
-    
-    // Load Images
     this.loadAssets();
-
-    // Initial State
     this.generateLevel();
     this.updateUI();
   }
@@ -66,8 +69,7 @@ class GameFrame {
     };
 
     this.bombImage = new Image();
-    // Corrected to match your uploaded file name
-    this.bombImage.src = 'assets/bomb-removebg-preview.png';
+    this.bombImage.src = 'assets/bomb-removebg-preview.png'; 
     this.bombImage.onload = () => this.render();
   }
 
@@ -100,19 +102,12 @@ class GameFrame {
     this.platforms = [];
     const platformWidth = this.canvas.width * 0.15;
     const platformHeight = this.canvas.height * 0.05;
-    const areas = [
-      { min: 0.2, max: 0.3 },
-      { min: 0.4, max: 0.5 },
-      { min: 0.6, max: 0.7 },
-      { min: 0.8, max: 0.85 }
-    ];
-
+    const areas = [{min:0.2,max:0.3}, {min:0.4,max:0.5}, {min:0.6,max:0.7}, {min:0.8,max:0.85}];
     areas.forEach(area => {
       this.platforms.push({
         x: Math.random() * (this.canvas.width - platformWidth),
         y: this.canvas.height * (area.min + Math.random() * (area.max - area.min)),
-        width: platformWidth,
-        height: platformHeight
+        width: platformWidth, height: platformHeight
       });
     });
   }
@@ -124,8 +119,7 @@ class GameFrame {
       this.coins.push({
         x: p.x + (p.width / 2) - (coinSize / 2),
         y: p.y - coinSize - 5,
-        size: coinSize,
-        collected: false
+        size: coinSize, collected: false
       });
     });
   }
@@ -140,17 +134,93 @@ class GameFrame {
     this.mario.isJumping = false;
   }
 
+  // --- CONTROLS LOGIC ---
+  initializeControls() {
+    // Menu Buttons
+    const startBtn = document.getElementById('startBtn');
+    const pauseBtn = document.getElementById('pauseBtn');
+    const resetBtn = document.getElementById('resetBtn');
+
+    if (startBtn) startBtn.onclick = () => this.start();
+    if (pauseBtn) pauseBtn.onclick = () => this.togglePause();
+    if (resetBtn) resetBtn.onclick = () => this.reset();
+
+    // Movement Buttons (UI)
+    const dirs = ['left', 'right', 'up'];
+    dirs.forEach(d => {
+      const btn = document.getElementById(d + 'Btn');
+      if (btn) {
+        btn.onmousedown = () => this.handleDirectionPress(d);
+        btn.onmouseup = () => this.handleDirectionRelease(d);
+        btn.ontouchstart = (e) => { e.preventDefault(); this.handleDirectionPress(d); };
+        btn.ontouchend = (e) => { e.preventDefault(); this.handleDirectionRelease(d); };
+      }
+    });
+
+    // Keyboard
+    document.addEventListener('keydown', (e) => this.handleKeyDown(e));
+    document.addEventListener('keyup', (e) => this.handleKeyUp(e));
+
+    // Global Canvas Tap
+    this.canvas.addEventListener('click', () => {
+      if (this.isRunning && !this.isPaused) this.handleTap();
+    });
+  }
+
+  handleKeyDown(e) {
+    if (!this.isRunning || this.isPaused) return;
+    if (e.key === "ArrowLeft") this.keys.left = true;
+    if (e.key === "ArrowRight") this.keys.right = true;
+    if (e.key === "ArrowUp") this.handleTap(); // Use unified jump logic
+  }
+
+  handleKeyUp(e) {
+    if (e.key === "ArrowLeft") this.keys.left = false;
+    if (e.key === "ArrowRight") this.keys.right = false;
+  }
+
+  handleDirectionPress(d) {
+    if (!this.isRunning || this.isPaused) return;
+    if (d === 'left') this.keys.left = true;
+    if (d === 'right') this.keys.right = true;
+    if (d === 'up') this.handleTap(); // Use unified jump logic
+  }
+
+  handleDirectionRelease(d) {
+    if (d === 'left') this.keys.left = false;
+    if (d === 'right') this.keys.right = false;
+  }
+
+  handleTap() {
+    const currentTime = Date.now();
+    const timeSinceLastTap = currentTime - this.touchState.lastTapTime;
+
+    // Double Tap Detection
+    if (this.touchState.lastTapTime > 0 && timeSinceLastTap < this.touchState.doubleTapDelay) {
+      this.mario.isJumping = true;
+      this.mario.velocityY = -this.mario.superJumpPower;
+      this.touchState.lastTapTime = 0; // Reset
+    } else {
+      // Normal Jump (Only if on ground)
+      if (!this.mario.isJumping) {
+        this.mario.isJumping = true;
+        this.mario.velocityY = -this.mario.jumpPower;
+      }
+      this.touchState.lastTapTime = currentTime;
+    }
+  }
+
+  // --- GAME LOOP ---
   update() {
+    // Horizontal Move
     if (this.keys.left) { this.mario.x -= this.mario.speed; this.mario.facingRight = false; }
     if (this.keys.right) { this.mario.x += this.mario.speed; this.mario.facingRight = true; }
     
-    // Jump
-    if (this.keys.up && !this.mario.isJumping) {
-      this.mario.isJumping = true;
-      this.mario.velocityY = -this.mario.jumpPower;
-    }
+    // 1. Screen Wrapping
+    if (this.mario.x + this.mario.size < 0) this.mario.x = this.canvas.width;
+    else if (this.mario.x > this.canvas.width) this.mario.x = -this.mario.size;
 
-    // Gravity
+    // Vertical Move
     this.mario.y += this.mario.velocityY;
     this.mario.velocityY += this.mario.gravity;
 
@@ -164,10 +234,8 @@ class GameFrame {
     // Platform Collision
     this.platforms.forEach(p => {
       if (this.mario.velocityY > 0 && 
-          this.mario.x + this.mario.size > p.x && 
-          this.mario.x < p.x + p.width &&
-          this.mario.y + this.mario.size > p.y && 
-          this.mario.y + this.mario.size < p.y + 15) {
+          this.mario.x + this.mario.size > p.x && this.mario.x < p.x + p.width &&
+          this.mario.y + this.mario.size > p.y && this.mario.y + this.mario.size < p.y + 15) {
         this.mario.y = p.y - this.mario.size;
         this.mario.velocityY = 0;
         this.mario.isJumping = false;
@@ -186,37 +254,29 @@ class GameFrame {
       }
     });
 
-    // Bomb Collision (Game Over)
-    const b = this.bomb;
-    if (this.mario.x < b.x + b.size && this.mario.x + this.mario.size > b.x &&
-        this.mario.y < b.y + b.size && this.mario.y + this.mario.size > b.y) {
-      this.gameOver();
+    // Bomb Collision
+    if (this.bomb) {
+      const b = this.bomb;
+      if (this.mario.x < b.x + b.size && this.mario.x + this.mario.size > b.x &&
+          this.mario.y < b.y + b.size && this.mario.y + this.mario.size > b.y) {
+        this.gameOver();
+      }
     }
   }
 
   render() {
     this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
-
-    // Ground
     if (this.platformImage) {
       const h = this.canvas.height * 0.1;
       this.ctx.drawImage(this.platformImage, 0, this.canvas.height - h, this.canvas.width, h);
       this.platforms.forEach(p => this.ctx.drawImage(this.platformImage, p.x, p.y, p.width, p.height));
     }
-
-    // Coins
     if (this.coinImage) {
-      this.coins.forEach(c => {
-        if (!c.collected) this.ctx.drawImage(this.coinImage, c.x, c.y, c.size, c.size);
-      });
+      this.coins.forEach(c => { if (!c.collected) this.ctx.drawImage(this.coinImage, c.x, c.y, c.size, c.size); });
     }
-
-    // Bomb
     if (this.bombImage && this.bomb) {
       this.ctx.drawImage(this.bombImage, this.bomb.x, this.bomb.y, this.bomb.size, this.bomb.size);
     }
-
-    // Mario
     if (this.marioImage) {
       this.ctx.save();
       if (!this.mario.facingRight) {
@@ -229,6 +289,29 @@ class GameFrame {
     }
   }
 
+  // --- UI & STATE ---
+  start() { if (!this.isRunning) { this.isRunning = true; this.isPaused = false; this.gameLoop(); this.updateUI(); } }
+  
+  togglePause() {
+    if (this.isRunning) {
+      this.isPaused = !this.isPaused;
+      if (!this.isPaused) this.gameLoop();
+      this.updateUI();
+    }
+  }
+
+  reset() {
+    this.isRunning = false;
+    this.isPaused = false;
+    this.score = 0;
+    this.level = 1;
+    cancelAnimationFrame(this.animationId);
+    this.initializeMarioPosition();
+    this.generateLevel();
+    this.render();
+    this.updateUI();
+  }
+
   gameOver() {
     this.isRunning = false;
     alert("BOOM! Game Over. Score: " + this.score);
@@ -238,8 +321,8 @@ class GameFrame {
   endRound() {
     this.isPaused = true;
     const popup = document.createElement('div');
-    popup.style = "position:fixed; top:50%; left:50%; transform:translate(-50%,-50%); background:white; padding:20px; border:2px solid black; text-align:center; z-index:1000;";
-    popup.innerHTML = `<h3>Round ${this.level} Complete!</h3><p>Score: ${this.score}</p><button id="nextBtn">Next Round</button>`;
+    popup.style = "position:fixed; top:50%; left:50%; transform:translate(-50%,-50%); background:white; padding:20px; border:2px solid black; text-align:center; z-index:1000; font-family: Arial, sans-serif; box-shadow: 0 0 10px rgba(0,0,0,0.5);";
+    popup.innerHTML = `<h3>Round ${this.level} Complete!</h3><p>Score: ${this.score}</p><button id="nextBtn" style="padding: 10px 20px; cursor: pointer; background: #4CAF50; color: white; border: none; border-radius: 4px;">Next Round</button>`;
     document.body.appendChild(popup);
     document.getElementById('nextBtn').onclick = () => {
       document.body.removeChild(popup);
@@ -259,39 +342,18 @@ class GameFrame {
     this.animationId = requestAnimationFrame(() => this.gameLoop());
   }
 
-  start() { if (!this.isRunning) { this.isRunning = true; this.gameLoop(); this.updateUI(); } }
-  
-  reset() {
-    this.isRunning = false;
-    this.score = 0;
-    this.level = 1;
-    cancelAnimationFrame(this.animationId);
-    this.initializeMarioPosition();
-    this.generateLevel();
-    this.render();
-    this.updateUI();
-  }
-
   updateUI() {
-    document.getElementById('score').textContent = this.score;
-    const lv = document.getElementById('level');
-    if (lv) lv.textContent = this.level;
-    document.getElementById('status').textContent = this.isRunning ? "Running" : "Ready";
-  }
+    const scoreEl = document.getElementById('score');
+    const levelEl = document.getElementById('level');
+    const statusEl = document.getElementById('status');
+    const pauseBtn = document.getElementById('pauseBtn');
+    const startBtn = document.getElementById('startBtn');
 
-  initializeControls() {
-    document.getElementById('startBtn').onclick = () => this.start();
-    document.getElementById('resetBtn').onclick = () => this.reset();
-    document.addEventListener('keydown', (e) => {
-      if (e.key === "ArrowLeft") this.keys.left = true;
-      if (e.key === "ArrowRight") this.keys.right = true;
-      if (e.key === "ArrowUp") this.keys.up = true;
-    });
-    document.addEventListener('keyup', (e) => {
-      if (e.key === "ArrowLeft") this.keys.left = false;
-      if (e.key === "ArrowRight") this.keys.right = false;
-      if (e.key === "ArrowUp") this.keys.up = false;
-    });
+    if (scoreEl) scoreEl.textContent = this.score;
+    if (levelEl) levelEl.textContent = this.level;
+    if (statusEl) statusEl.textContent = this.isRunning ? (this.isPaused ? "Paused" : "Running") : "Ready";
+    if (pauseBtn) pauseBtn.textContent = this.isPaused ? "Resume" : "Pause";
+    if (startBtn) startBtn.disabled = this.isRunning;
   }
 }
 
