@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <title>Home</title>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width" />
+    <!--
+      Need a visual blank slate?
+      Remove all code in `styles.css`!
+    -->
+    <link rel="stylesheet" href="styles.css" />
+    <script type="module" src="script.js"></script>
+  </head>
+  <body>
+    <main>
+      <div class="game-container">
+        <canvas id="gameCanvas" width="800" height="600"></canvas>
+        <div class="directional-controls">
+          <div class="direction-row">
+            <button id="upBtn" class="direction-btn">↑</button>
+          </div>
+          <div class="direction-row">
+            <button id="leftBtn" class="direction-btn">←</button>
+            <button id="downBtn" class="direction-btn">↓</button>
+            <button id="rightBtn" class="direction-btn">→</button>
+          </div>
+        </div>
+        <div class="game-controls">
+          <button id="startBtn">Start Game</button>
+          <button id="pauseBtn">Pause</button>
+          <button id="resetBtn">Reset</button>
+        </div>
+        <div class="game-info">
+          <div class="score">Score: <span id="score">0</span></div>
+          <div>Level: <span id="level">1</span></div>
+          <div class="status">Status: <span id="status">Ready</span></div>
+        </div>
+      </div>
+    </main>
+  </body>
+</html>
